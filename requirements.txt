@@ -1,0 +1,7 @@
+fastmcp>=0.1.0
+paho-mqtt>=2.0.0
+python-dotenv>=1.0.0
+mem0>=0.2.0
+psycopg2-binary>=2.9.6  # For PostgreSQL/Supabase connections
+openai>=1.0.0  # For OpenAI API
+setuptools>=65.5.1  # Required by some dependencies
