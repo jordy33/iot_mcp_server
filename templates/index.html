@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IoT Light Bulb Simulator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        .light-bulb {
+            width: 100px;
+            height: 150px;
+            margin: 30px auto;
+            position: relative;
+        }
+        .bulb {
+            width: 80px;
+            height: 80px;
+            background-color: #eee;
+            border-radius: 50%;
+            margin: 0 auto;
+            position: relative;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .bulb.on {
+            box-shadow: 0 0 30px;
+        }
+        .base {
+            width: 30px;
+            height: 20px;
+            background-color: #555;
+            margin: 0 auto;
+            border-radius: 3px;
+        }
+        .controls {
+            margin-top: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+        .toggle-btn {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        .toggle-btn:hover {
+            background-color: #45a049;
+        }
+        .slider-container {
+            width: 100%;
+            max-width: 300px;
+        }
+        .slider {
+            width: 100%;
+            height: 25px;
+            background: #d3d3d3;
+            outline: none;
+            -webkit-appearance: none;
+            border-radius: 10px;
+        }
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 25px;
+            height: 25px;
+            background: #4CAF50;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        .slider::-moz-range-thumb {
+            width: 25px;
+            height: 25px;
+            background: #4CAF50;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        .color-picker {
+            margin-top: 10px;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+            font-family: monospace;
+            text-align: left;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .mqtt-info {
+            margin-top: 20px;
+            background-color: #e8f4f8;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>IoT Light Bulb Simulator</h1>
+        <p>Device ID: <strong id="device-id">{{ device_state.device_id }}</strong></p>
+        
+        <div class="light-bulb">
+            <div id="bulb" class="bulb {% if device_state.properties.power %}on{% endif %}" 
+                 style="background-color: {% if device_state.properties.power %}{{ device_state.properties.color }}{% else %}#eee{% endif %}; 
+                        opacity: {% if device_state.properties.power %}{{ device_state.properties.brightness/100 }}{% else %}1{% endif %};">
+            </div>
+            <div class="base"></div>
+        </div>
+        
+        <div class="controls">
+            <button id="toggle-btn" class="toggle-btn">
+                {% if device_state.properties.power %}Turn Off{% else %}Turn On{% endif %}
+            </button>
+            
+            <div class="slider-container">
+                <label for="brightness">Brightness: <span id="brightness-value">{{ device_state.properties.brightness }}</span>%</label>
+                <input type="range" min="1" max="100" value="{{ device_state.properties.brightness }}" class="slider" id="brightness">
+            </div>
+            
+            <div class="color-picker">
+                <label for="color">Color:</label>
+                <input type="color" id="color" value="{{ device_state.properties.color }}">
+            </div>
+        </div>
+        
+        <div class="status">
+            <h3>Device State:</h3>
+            <pre id="state-display">{{ device_state | tojson(indent=2) }}</pre>
+        </div>
+        
+        <div class="mqtt-info">
+            <h3>MQTT Information:</h3>
+            <p><strong>Broker:</strong> {{ device_state.mqtt_broker if device_state.mqtt_broker else 'localhost' }}:{{ device_state.mqtt_port if device_state.mqtt_port else '1883' }}</p>
+            <p><strong>Command Topic:</strong> devices/{{ device_state.device_id }}/command</p>
+            <p><strong>State Topic:</strong> devices/{{ device_state.device_id }}/state</p>
+            <p><strong>State Request Topic:</strong> devices/{{ device_state.device_id }}/state/request</p>
+        </div>
+    </div>
+
+    <script>
+        // Elements
+        const bulb = document.getElementById('bulb');
+        const toggleBtn = document.getElementById('toggle-btn');
+        const brightnessSlider = document.getElementById('brightness');
+        const brightnessValue = document.getElementById('brightness-value');
+        const colorPicker = document.getElementById('color');
+        const stateDisplay = document.getElementById('state-display');
+        
+        // Current state
+        let deviceState = {{ device_state | tojson }};
+        
+        // Update UI based on state
+        function updateUI() {
+            // Update bulb appearance
+            if (deviceState.properties.power) {
+                bulb.classList.add('on');
+                bulb.style.backgroundColor = deviceState.properties.color;
+                bulb.style.opacity = deviceState.properties.brightness / 100;
+                toggleBtn.textContent = 'Turn Off';
+            } else {
+                bulb.classList.remove('on');
+                bulb.style.backgroundColor = '#eee';
+                bulb.style.opacity = 1;
+                toggleBtn.textContent = 'Turn On';
+            }
+            
+            // Update controls
+            brightnessSlider.value = deviceState.properties.brightness;
+            brightnessValue.textContent = deviceState.properties.brightness;
+            colorPicker.value = deviceState.properties.color;
+            
+            // Update state display
+            stateDisplay.textContent = JSON.stringify(deviceState, null, 2);
+        }
+        
+        // Toggle light
+        toggleBtn.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/toggle', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const data = await response.json();
+                if (data.success) {
+                    deviceState.properties.power = data.power;
+                    updateUI();
+                }
+            } catch (error) {
+                console.error('Error toggling light:', error);
+            }
+        });
+        
+        // Set brightness
+        brightnessSlider.addEventListener('input', () => {
+            brightnessValue.textContent = brightnessSlider.value;
+            if (deviceState.properties.power) {
+                bulb.style.opacity = brightnessSlider.value / 100;
+            }
+        });
+        
+        brightnessSlider.addEventListener('change', async () => {
+            try {
+                const response = await fetch('/api/brightness', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        brightness: parseInt(brightnessSlider.value)
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    deviceState.properties.brightness = data.brightness;
+                    updateUI();
+                }
+            } catch (error) {
+                console.error('Error setting brightness:', error);
+            }
+        });
+        
+        // Set color
+        colorPicker.addEventListener('change', async () => {
+            try {
+                const response = await fetch('/api/color', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        color: colorPicker.value
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    deviceState.properties.color = data.color;
+                    updateUI();
+                }
+            } catch (error) {
+                console.error('Error setting color:', error);
+            }
+        });
+        
+        // Periodically refresh state from server
+        setInterval(async () => {
+            try {
+                const response = await fetch('/api/state');
+                const data = await response.json();
+                deviceState = data;
+                updateUI();
+            } catch (error) {
+                console.error('Error fetching state:', error);
+            }
+        }, 2000);
+    </script>
+</body>
+</html>
